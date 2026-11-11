@@ -42,9 +42,9 @@ def health_check():
 async def consultar_car(cod_car: str):
     cod_car = cod_car.strip().upper()
     
-    # Consulta seletiva no Parquet via HTTP sem transferir o ficheiro integral
+# Consulta seletiva com conversão explícita do binário WKB para geometria
     query = f"""
-        SELECT cod_imovel, municipio, uf, area_ha, ST_AsGeoJSON(geom) as geojson
+        SELECT cod_imovel, municipio, uf, area_ha, ST_AsGeoJSON(ST_GeomFromWKB(geom)) as geojson
         FROM read_parquet('{URL_PARQUET}')
         WHERE UPPER(cod_imovel) = ?
         LIMIT 1;
