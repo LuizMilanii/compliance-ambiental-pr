@@ -19,28 +19,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Conexão DuckDB em memória com suporte espacial e leitura Parquet via HTTP
+# Conexão DuckDB em memória com extensões espaciais e httpfs
 con = duckdb.connect(database=":memory:")
 con.execute("INSTALL spatial; LOAD spatial;")
 con.execute("INSTALL httpfs; LOAD httpfs;")
 
+# Endereços dos arquivos GeoParquet no GitHub Releases
 URL_CAR_PARQUET = "https://github.com/LuizMilanii/compliance-ambiental-pr/releases/download/v1.0/car_pr.parquet"
 URL_PRODES_PARQUET = "https://github.com/LuizMilanii/compliance-ambiental-pr/releases/download/v1.0/prodes_pr.parquet"
 
-# Projeção UTM 22S para cálculo preciso de áreas no Paraná
+# Projeção métrica para o Paraná (SIRGAS 2000 / UTM zone 22S - EPSG:31982)
 proj_wgs84 = pyproj.CRS("EPSG:4326")
 proj_utm_pr = pyproj.CRS("EPSG:31982")
 transformer = pyproj.Transformer.from_crs(proj_wgs84, proj_utm_pr, always_xy=True).transform
 
 def calcular_area_ha(geom):
-    """Calcula a área precisa em hectares convertendo para projeção UTM."""
+    """Calcula a área precisa em hectares convertendo para projeção métrica UTM."""
     try:
         geom_utm = transform(transformer, geom)
         return round(geom_utm.area / 10000.0, 4)
     except Exception:
         return 0.0
 
-# Tabela INCRA de Módulo Fiscal (ha) para municípios do Paraná
+# Tabela INCRA de Módulos Fiscais (ha) para municípios do Paraná
 TABELA_MF_PR = {
     "CURITIBA": 10.0, "ITAPERUCU": 12.0, "ALMIRANTE TAMANDARE": 10.0,
     "RIO BRANCO DO SUL": 12.0, "COLOMBO": 10.0, "SAO JOSE DOS PINHAIS": 12.0,
@@ -63,15 +64,16 @@ def obter_modulo_fiscal(nome_municipio: str) -> float:
 
 @app.get("/")
 def health_check():
-    return {"status": "operacional", "modulo": "MCR 2-9 / Res. CMN 5.303"}
+    return {"status": "operacional", "norma": "MCR 2-9 / Resolução CMN 5.303"}
 
 @app.get("/consultar/{cod_car:path}")
 async def consultar_car(cod_car: str):
+    # 1. Normalização do CAR: limpa hífens, pontos e espaços
     cod_limpo = re.sub(r"[^A-Z0-9]", "", cod_car.upper())
     if not cod_limpo:
         raise HTTPException(status_code=400, detail="Código de CAR inválido.")
 
-    # 1. Busca do Imóvel no Parquet do CAR
+    # 2. Busca do Imóvel no Parquet do CAR
     query_car = f"""
         SELECT cod_imovel, municipio, uf, area_ha, ST_AsGeoJSON(ST_GeomFromWKB(geom)) as geojson
         FROM read_parquet('{URL_CAR_PARQUET}')
@@ -82,7 +84,7 @@ async def consultar_car(cod_car: str):
     try:
         res = con.execute(query_car, [cod_limpo, cod_limpo]).fetchone()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao consultar a base do CAR: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao consultar base do CAR: {str(e)}")
 
     if not res:
         raise HTTPException(status_code=404, detail="CAR não localizado na base do Paraná.")
@@ -92,7 +94,7 @@ async def consultar_car(cod_car: str):
     car_geom = raw_geom.buffer(0)
     minx, miny, maxx, maxy = car_geom.bounds
 
-    # 2. Cálculo dos Módulos Fiscais e Enquadramento MCR 2-9 Item 17
+    # 3. Enquadramento Normativo MCR 2-9, Item 17 (Res. CMN 5.303)
     mf_ha = obter_modulo_fiscal(municipio)
     qtd_mf = round(area_ha / mf_ha, 2)
 
@@ -109,7 +111,7 @@ async def consultar_car(cod_car: str):
         alinea = "Alínea 'c'"
         vigencia = "03 de janeiro de 2028"
 
-    # 3. Consulta ao PRODES Parquet
+    # 4. Interseção Espacial no PRODES Parquet
     query_prodes = f"""
         SELECT 
             ano,
@@ -118,6 +120,7 @@ async def consultar_car(cod_car: str):
         WHERE ST_Intersects(ST_GeomFromWKB(geom), ST_GeomFromText('{car_geom.wkt}'));
     """
 
+    prodes_features_mapa = []
     prodes_pos_2019_geoms = []
     prodes_pre_2019_geoms = []
     anos_pos_2019 = set()
@@ -133,21 +136,34 @@ async def consultar_car(cod_car: str):
                     if inter.geom_type == "GeometryCollection":
                         polys = [g for g in inter.geoms if g.geom_type in ["Polygon", "MultiPolygon"]]
                         inter = unary_union(polys) if polys else None
-                    
+
                     if inter and not inter.is_empty:
                         ano_int = int(ano_val) if ano_val is not None else None
-                        # Marco temporal MCR 2-9 Item 17: após 31 de julho de 2019 (anos >= 2020)
-                        if ano_int and ano_int >= 2020:
+                        area_fracao_ha = calcular_area_ha(inter)
+                        # Marco MCR 17: supressão após 31/07/2019 (anos >= 2020)
+                        eh_pos_2019 = bool(ano_int and ano_int >= 2020)
+
+                        if eh_pos_2019:
                             prodes_pos_2019_geoms.append(inter)
                             anos_pos_2019.add(ano_int)
                         else:
                             prodes_pre_2019_geoms.append(inter)
                             if ano_int:
                                 anos_pre_2019.add(ano_int)
+
+                        prodes_features_mapa.append({
+                            "type": "Feature",
+                            "geometry": mapping(inter),
+                            "properties": {
+                                "ano": ano_int if ano_int else "N/D",
+                                "area_ha": area_fracao_ha,
+                                "pos_2019": eh_pos_2019
+                            }
+                        })
     except Exception as e:
         print(f"Aviso PRODES: {str(e)}")
 
-    # 4. Consulta IBAMA (Embargos Ambientais vigentes)
+    # 5. Consulta aos Embargos do IBAMA via WFS
     wfs_ibama_url = (
         "https://geoserver.ibama.gov.br/geoserver/wfs?"
         "service=WFS&version=1.0.0&request=GetFeature&typeName=ibama:embargos&"
@@ -168,8 +184,8 @@ async def consultar_car(cod_car: str):
         except Exception:
             pass
 
-    # 5. Consolidação de Áreas e Geometrias
-    def unificar_e_calcular(geoms):
+    # 6. Consolidação e Deduplicação Espacial
+    def unificar_geometrias(geoms):
         if not geoms:
             return 0.0, []
         uniao = unary_union(geoms)
@@ -177,40 +193,40 @@ async def consultar_car(cod_car: str):
         geojsons = [mapping(uniao)] if uniao.geom_type in ["Polygon", "MultiPolygon"] else []
         return area, geojsons
 
-    area_ibama, geo_ibama = unificar_e_calcular(ibama_intersect_geoms)
-    area_pos_2019, geo_pos_2019 = unificar_e_calcular(prodes_pos_2019_geoms)
-    area_pre_2019, geo_pre_2019 = unificar_e_calcular(prodes_pre_2019_geoms)
-    area_prodes_total, geo_prodes_total = unificar_e_calcular(prodes_pos_2019_geoms + prodes_pre_2019_geoms)
+    area_ibama, geo_ibama = unificar_geometrias(ibama_intersect_geoms)
+    area_pos_2019, _ = unificar_geometrias(prodes_pos_2019_geoms)
+    area_pre_2019, _ = unificar_geometrias(prodes_pre_2019_geoms)
+    area_prodes_total, _ = unificar_geometrias(prodes_pos_2019_geoms + prodes_pre_2019_geoms)
 
-    # 6. Parecer Técnico Conclusivo e Descrição Normativa
+    # 7. Redação do Parecer Técnico e Fundamentação
     tem_embargo = area_ibama > 0.0
     tem_desmat_pos_2019 = area_pos_2019 > 0.0
 
     if tem_embargo:
-        status_geral = "IMPEDIMENTO IMEDIATO (MCR 2-9, Item 2)"
+        status_geral = "IMPEDIMENTO IMEDIATO (MCR 2-9, ITEM 2)"
         descricao_impedimento = (
             f"O imóvel possui sobreposição de {area_ibama} ha com Embargo Ambiental Federal vigente do IBAMA. "
-            "Pelo MCR 2-9-2 e Lei nº 9.605/1998, é vedada a concessão de crédito rural para a área embargada."
+            "Pelo item 2 da Seção MCR 2-9 e Lei Federal nº 9.605/1998, é vedada a concessão de crédito rural para a área embargada."
         )
     elif tem_desmat_pos_2019:
-        status_geral = f"IMPEDIMENTO VINCULADO AO MCR 2-9, ITEM 17 ({alinea.upper()})"
+        status_geral = f"IMPEDIMENTO VINCULADO AO MCR 2-9, ITEM 17 ({alinea.upper()})"[cite: 8]
         descricao_impedimento = (
-            f"Detectada supressão de vegetação nativa após 31/07/2019, totalizando {area_pos_2019} ha (anos: {sorted(list(anos_pos_2019))}). "
-            f"Com área total de {area_ha} ha ({qtd_mf} Módulos Fiscais para o município de {municipio}), o imóvel enquadra-se como "
-            f"'{porte}'. Conforme a Resolução CMN nº 5.303 (art. 1º, MCR 2-9, item 17, {alinea}), "
-            f"a exigência de impedimento para a concessão de crédito rural é mandatória a partir de {vigencia}."
+            f"Detectada supressão de vegetação nativa após 31/07/2019, totalizando {area_pos_2019} ha (anos: {sorted(list(anos_pos_2019))}). "[cite: 8]
+            f"Com dimensão de {area_ha} ha ({qtd_mf} Módulos Fiscais para {municipio}), o imóvel rural classifica-se como "
+            f"'{porte}'. Nos termos da Resolução CMN nº 5.303 (art. 1º, MCR 2-9, item 17, {alinea}), "[cite: 8]
+            f"o impedimento de crédito rural por supressão de vegetação nativa passa a ser mandatório a partir de {vigencia}."[cite: 8]
         )
     else:
         status_geral = "IMÓVEL CONFORME (MCR 2-9)"
         if area_pre_2019 > 0.0:
             descricao_impedimento = (
-                f"Imóvel regular para concessão de crédito rural. O desmatamento detectado ({area_pre_2019} ha, anos: {sorted(list(anos_pre_2019))}) "
-                "ocorreu antes do marco de 31/07/2019, não incidindo a vedação do item 17 do MCR 2-9 (Res. CMN 5.303)."
+                f"Imóvel em conformidade para contratação de crédito rural. O desmatamento mapeado ({area_pre_2019} ha, anos: {sorted(list(anos_pre_2019))}) "
+                "ocorreu antes do marco legal de 31/07/2019, não incidindo o bloqueio do item 17 do MCR 2-9 (Resolução CMN nº 5.303)."[cite: 8]
             )
         else:
             descricao_impedimento = (
-                "Nenhum embargo ambiental do IBAMA ou supressão de vegetação nativa pelo PRODES (INPE) "
-                "foram detectados sobre o perímetro do imóvel rural."
+                "Nenhum embargo ambiental do IBAMA ou polígono de desmatamento pelo PRODES (INPE) "
+                "foi identificado sobre o perímetro cadastrado do imóvel rural."
             )
 
     return {
@@ -226,7 +242,7 @@ async def consultar_car(cod_car: str):
                 "classificacao_porte": porte,
                 "alinea_resolucao": alinea,
                 "data_inicio_exigencia": vigencia,
-                "marco_temporal": "Após 31 de julho de 2019",
+                "marco_temporal": "Após 31 de julho de 2019",[cite: 8]
                 "supressao_pos_2019_detectada": tem_desmat_pos_2019,
                 "area_supressao_pos_2019_ha": area_pos_2019,
                 "anos_pos_2019": sorted(list(anos_pos_2019)),
@@ -246,7 +262,7 @@ async def consultar_car(cod_car: str):
             "desmatamento_prodes": {
                 "detectado": area_prodes_total > 0.0,
                 "area_total_ha": area_prodes_total,
-                "geometrias": geo_prodes_total
+                "features": prodes_features_mapa
             },
             "geojson_car": json.loads(geojson_str)
         }
