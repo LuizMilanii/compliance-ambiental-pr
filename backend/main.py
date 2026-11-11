@@ -23,7 +23,7 @@ con.execute("INSTALL spatial; LOAD spatial;")
 con.execute("INSTALL httpfs; LOAD httpfs;")
 
 # Ligação direta à base do CAR-PR publicada na release do GitHub
-URL_PARQUET = "https://github.com/LuizMilanii/conformidade-ambiental-pr/releases/download/v1.0/car_pr.parquet"
+URL_PARQUET = "https://github.com/LuizMilanii/compliance-ambiental-pr/releases/download/v1.0/car_pr.parquet"
 
 # Projeção SIRGAS 2000 UTM 22S para cálculo métrico exato de hectares no Paraná
 proj_wgs84 = pyproj.CRS("EPSG:4326")
