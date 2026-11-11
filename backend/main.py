@@ -6,7 +6,7 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from shapely.geometry import shape, mapping
-from shapely.ops import transform
+from shapely.ops import transform, unary_union
 import pyproj
 
 app = FastAPI(title="Compliance Socioambiental PR")
@@ -19,14 +19,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# DuckDB em memória com extensões espaciais e httpfs
+# Conexão DuckDB em memória com suporte espacial e leitura remota HTTP
 con = duckdb.connect(database=":memory:")
 con.execute("INSTALL spatial; LOAD spatial;")
 con.execute("INSTALL httpfs; LOAD httpfs;")
 
+# Base GeoParquet do CAR-PR
 URL_PARQUET = "https://github.com/LuizMilanii/compliance-ambiental-pr/releases/download/v1.0/car_pr.parquet"
 
-# Projeção UTM 22S para cálculo preciso de áreas no Paraná
+# Projeção métrica para o Paraná (SIRGAS 2000 / UTM zone 22S - EPSG:31982)
 proj_wgs84 = pyproj.CRS("EPSG:4326")
 proj_utm_pr = pyproj.CRS("EPSG:31982")
 transformer = pyproj.Transformer.from_crs(proj_wgs84, proj_utm_pr, always_xy=True).transform
@@ -40,18 +41,16 @@ def calcular_area_ha(geom):
         return 0.0
 
 def extrair_ano_prodes(props):
-    """Extrai o ano da supressão florestal inspecionando todos os campos possíveis do INPE."""
+    """Extrai o ano da supressão florestal a partir dos atributos do INPE."""
     for campo in ["year", "ano", "def_year", "ano_prodes", "nu_ano", "anoref"]:
         if campo in props and props[campo] is not None:
             try:
                 return int(props[campo])
             except (ValueError, TypeError):
                 pass
-    
-    # Busca por padrões de 4 dígitos em campos textuais (ex: 'd2018', 'desmate_2016')
     for val in props.values():
         if isinstance(val, (str, int)):
-            match = re.search(r"\b(20\d{2})\b", str(val))
+            match = re.search(r"\b(20\d{2}|19\d{2})\b", str(val))
             if match:
                 return int(match.group(1))
     return None
@@ -60,56 +59,67 @@ def extrair_ano_prodes(props):
 def health_check():
     return {"status": "operacional", "estado": "Paraná (PR)"}
 
-@app.get("/consultar/{cod_car}")
+@app.get("/consultar/{cod_car:path}")
 async def consultar_car(cod_car: str):
-    cod_car = cod_car.strip().upper()
+    # 1. Normalização do CAR: remove pontuações, traços, barras e espaços
+    cod_limpo = re.sub(r"[^A-Z0-9]", "", cod_car.upper())
+    if not cod_limpo:
+        raise HTTPException(status_code=400, detail="Código de CAR inválido.")
 
-    # 1. Consulta no GeoParquet com conversão explícita ST_GeomFromWKB
+    # 2. Busca flexível no GeoParquet (reconhece com máscara, sem máscara ou sem 'PR')
     query = f"""
         SELECT cod_imovel, municipio, uf, area_ha, ST_AsGeoJSON(ST_GeomFromWKB(geom)) as geojson
         FROM read_parquet('{URL_PARQUET}')
-        WHERE UPPER(cod_imovel) = ?
+        WHERE regexp_replace(UPPER(cod_imovel), '[^A-Z0-9]', '', 'g') = ?
+           OR regexp_replace(UPPER(cod_imovel), '[^A-Z0-9]', '', 'g') = 'PR' || ?
         LIMIT 1;
     """
     try:
-        res = con.execute(query, [cod_car]).fetchone()
+        res = con.execute(query, [cod_limpo, cod_limpo]).fetchone()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao consultar base local: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao consultar a base do CAR: {str(e)}")
 
     if not res:
         raise HTTPException(status_code=404, detail="CAR não localizado na base do Paraná.")
 
     cod_imovel, municipio, uf, area_ha, geojson_str = res
     raw_geom = shape(json.loads(geojson_str))
-    # Repara auto-interseções e topologias inválidas do polígono do CAR
-    car_geom = raw_geom.buffer(0)
-    minx, miny, maxx, maxy = car_geom.bounds
+    car_geom = raw_geom.buffer(0)  # Corrige auto-interseções topológicas
 
-    # 2. Endpoints WFS oficiais
+    # Margem de segurança de ~300 metros na BBOX para não truncar feições de borda
+    pad = 0.003
+    minx, miny, maxx, maxy = car_geom.bounds
+    q_minx, q_miny, q_maxx, q_maxy = minx - pad, miny - pad, maxx + pad, maxy + pad
+
+    # 3. Definição das camadas e servidores de monitoramento
     wfs_ibama_url = (
         "https://geoserver.ibama.gov.br/geoserver/wfs?"
         "service=WFS&version=1.0.0&request=GetFeature&typeName=ibama:embargos&"
-        f"outputFormat=application/json&srsName=EPSG:4326&bbox={minx},{miny},{maxx},{maxy}"
+        f"outputFormat=application/json&srsName=EPSG:4326&bbox={q_minx},{q_miny},{q_maxx},{q_maxy}"
     )
 
-    # Variações de rotas do GeoServer do TerraBrasilis / INPE
-    candidatos_prodes = [
-        ("Mata Atlântica (OWS Global)", f"https://terrabrasilis.dpi.inpe.br/geoserver/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=prodes_mata_atlantica:yearly_deforestation&outputFormat=application/json&srsName=EPSG:4326&bbox={minx},{miny},{maxx},{maxy},EPSG:4326"),
-        ("Mata Atlântica (Workspace Virtual)", f"https://terrabrasilis.dpi.inpe.br/geoserver/prodes_mata_atlantica/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=yearly_deforestation&outputFormat=application/json&srsName=EPSG:4326&bbox={minx},{miny},{maxx},{maxy},EPSG:4326"),
-        ("Mata Atlântica (Fallback Layer)", f"https://terrabrasilis.dpi.inpe.br/geoserver/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=prodes_mata_atlantica:prodes_mata_atlantica&outputFormat=application/json&srsName=EPSG:4326&bbox={minx},{miny},{maxx},{maxy},EPSG:4326"),
-        ("Cerrado (OWS)", f"https://terrabrasilis.dpi.inpe.br/geoserver/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=prodes_cerrado:yearly_deforestation&outputFormat=application/json&srsName=EPSG:4326&bbox={minx},{miny},{maxx},{maxy},EPSG:4326")
+    # Varredura completa das bases do INPE / TerraBrasilis
+    camadas_inpe = [
+        ("PRODES Mata Atlântica", f"https://terrabrasilis.dpi.inpe.br/geoserver/wfs?service=WFS&version=1.0.0&request=GetFeature&typeName=prodes_mata_atlantica:yearly_deforestation&outputFormat=application/json&srsName=EPSG:4326&bbox={q_minx},{q_miny},{q_maxx},{q_maxy}"),
+        ("PRODES Mata Atlântica (hífen)", f"https://terrabrasilis.dpi.inpe.br/geoserver/wfs?service=WFS&version=1.0.0&request=GetFeature&typeName=prodes-mata-atlantica:yearly_deforestation&outputFormat=application/json&srsName=EPSG:4326&bbox={q_minx},{q_miny},{q_maxx},{q_maxy}"),
+        ("PRODES Mata Atlântica (geral)", f"https://terrabrasilis.dpi.inpe.br/geoserver/wfs?service=WFS&version=1.0.0&request=GetFeature&typeName=prodes_mata_atlantica:prodes_mata_atlantica&outputFormat=application/json&srsName=EPSG:4326&bbox={q_minx},{q_miny},{q_maxx},{q_maxy}"),
+        ("PRODES Cerrado", f"https://terrabrasilis.dpi.inpe.br/geoserver/wfs?service=WFS&version=1.0.0&request=GetFeature&typeName=prodes_cerrado:yearly_deforestation&outputFormat=application/json&srsName=EPSG:4326&bbox={q_minx},{q_miny},{q_maxx},{q_maxy}"),
+        ("PRODES Cerrado (hífen)", f"https://terrabrasilis.dpi.inpe.br/geoserver/wfs?service=WFS&version=1.0.0&request=GetFeature&typeName=prodes-cerrado:yearly_deforestation&outputFormat=application/json&srsName=EPSG:4326&bbox={q_minx},{q_miny},{q_maxx},{q_maxy}"),
+        ("DETER Mata Atlântica", f"https://terrabrasilis.dpi.inpe.br/geoserver/wfs?service=WFS&version=1.0.0&request=GetFeature&typeName=deter_mata_atlantica:deter_mata_atlantica&outputFormat=application/json&srsName=EPSG:4326&bbox={q_minx},{q_miny},{q_maxx},{q_maxy}")
     ]
 
-    ibama_intersect_area = 0.0
-    ibama_features = []
-    prodes_intersect_area = 0.0
-    prodes_features = []
+    headers_web = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*"
+    }
+
+    ibama_intersect_geoms = []
+    prodes_intersect_geoms = []
     anos_detectados = set()
-    biomas_detectados = set()
+    bases_detectadas = set()
     diagnostico = []
 
-    # Desativação de verificação SSL (verify=False) para evitar recusa nos servidores federais
-    async with httpx.AsyncClient(verify=False, timeout=25.0, follow_redirects=True) as client:
+    async with httpx.AsyncClient(verify=False, timeout=25.0, headers=headers_web, follow_redirects=True) as client:
         # Consulta IBAMA
         try:
             resp_ibama = await client.get(wfs_ibama_url)
@@ -119,56 +129,69 @@ async def consultar_car(cod_car: str):
                     geom_e = shape(feat["geometry"]).buffer(0)
                     if car_geom.intersects(geom_e):
                         inter = car_geom.intersection(geom_e)
-                        a_ha = calcular_area_ha(inter)
-                        if a_ha > 0.0001:
-                            ibama_intersect_area += a_ha
-                            ibama_features.append(mapping(inter))
+                        if not inter.is_empty:
+                            ibama_intersect_geoms.append(inter)
         except Exception as e:
             diagnostico.append(f"IBAMA falhou: {str(e)}")
 
-        # Consulta PRODES
-        for rotulo, url in candidatos_prodes:
-            try:
-                resp = await client.get(url)
-                if resp.status_code == 200:
-                    try:
-                        data = resp.json()
-                    except Exception:
-                        diagnostico.append(f"{rotulo}: HTTP 200 recebido, mas resposta não é JSON (possível erro XML do GeoServer).")
+        # Consultas concorrentes ao INPE
+        tasks = [client.get(url) for _, url in camadas_inpe]
+        respostas = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for (label, _), resp in zip(camadas_inpe, respostas):
+            if isinstance(resp, httpx.Response) and resp.status_code == 200:
+                try:
+                    data_inpe = resp.json()
+                except Exception:
+                    continue
+
+                feats = data_inpe.get("features", [])
+                if feats:
+                    diagnostico.append(f"{label}: {len(feats)} registros brutos na região")
+
+                for feat in feats:
+                    geom_raw = feat.get("geometry")
+                    if not geom_raw:
                         continue
 
-                    feats = data.get("features", [])
-                    diagnostico.append(f"{rotulo}: {len(feats)} registros brutos encontrados na BBOX.")
+                    geom_p = shape(geom_raw).buffer(0)
+                    if car_geom.intersects(geom_p):
+                        inter = car_geom.intersection(geom_p)
+                        if inter.is_empty:
+                            continue
 
-                    if len(feats) > 0:
-                        for feat in feats:
-                            props = feat.get("properties", {})
-                            ano = extrair_ano_prodes(props)
-
-                            # Filtro temporal: somente eventos >= 2004
-                            if ano is not None and ano < 2004:
+                        # Isola apenas polígonos caso retorne GeometryCollection
+                        if inter.geom_type == "GeometryCollection":
+                            polys = [g for g in inter.geoms if g.geom_type in ["Polygon", "MultiPolygon"]]
+                            if polys:
+                                inter = unary_union(polys)
+                            else:
                                 continue
 
-                            geom_p = shape(feat["geometry"]).buffer(0)
-                            if car_geom.intersects(geom_p):
-                                inter_p = car_geom.intersection(geom_p)
-                                a_p = calcular_area_ha(inter_p)
-                                if a_p > 0.0001:
-                                    prodes_intersect_area += a_p
-                                    biomas_detectados.add("Mata Atlântica" if "Mata" in rotulo else "Cerrado")
-                                    if ano:
-                                        anos_detectados.add(ano)
-                                    prodes_features.append(mapping(inter_p))
-                        
-                        # Se já encontrou polígonos válidos na Mata Atlântica, não precisa rodar os fallbacks do mesmo bioma
-                        if prodes_intersect_area > 0 and "Mata" in rotulo:
-                            break
-                else:
-                    diagnostico.append(f"{rotulo}: Erro HTTP {resp.status_code}")
-            except Exception as e:
-                diagnostico.append(f"{rotulo}: Falha de conexão ({str(e)})")
+                        prodes_intersect_geoms.append(inter)
+                        bases_detectadas.add(label.split()[0])
+                        ano = extrair_ano_prodes(feat.get("properties", {}))
+                        if ano:
+                            anos_detectados.add(ano)
 
-    bloqueado = (ibama_intersect_area > 0.0) or (prodes_intersect_area > 0.0)
+    # 4. Cálculo de áreas consolidadas com união geométrica (sem duplicar hectares)
+    ibama_area_ha = 0.0
+    ibama_geojson = []
+    if ibama_intersect_geoms:
+        uniao_ibama = unary_union(ibama_intersect_geoms)
+        ibama_area_ha = calcular_area_ha(uniao_ibama)
+        if uniao_ibama.geom_type in ["Polygon", "MultiPolygon"]:
+            ibama_geojson = [mapping(uniao_ibama)]
+
+    prodes_area_ha = 0.0
+    prodes_geojson = []
+    if prodes_intersect_geoms:
+        uniao_prodes = unary_union(prodes_intersect_geoms)
+        prodes_area_ha = calcular_area_ha(uniao_prodes)
+        if uniao_prodes.geom_type in ["Polygon", "MultiPolygon"]:
+            prodes_geojson = [mapping(uniao_prodes)]
+
+    bloqueado = (ibama_area_ha > 0.0) or (prodes_area_ha > 0.0)
 
     return {
         "status": "sucesso",
@@ -179,17 +202,17 @@ async def consultar_car(cod_car: str):
             "area_declarada_ha": area_ha,
             "bloqueio_credito": bloqueado,
             "embargo_ibama": {
-                "bloqueado": ibama_intersect_area > 0.0,
-                "area_sobreposta_ha": round(ibama_intersect_area, 4),
-                "geometrias": ibama_features
+                "bloqueado": ibama_area_ha > 0.0,
+                "area_sobreposta_ha": ibama_area_ha,
+                "geometrias": ibama_geojson
             },
             "desmatamento_prodes": {
-                "criterio_temporal": ">= 2004",
-                "detectado": prodes_intersect_area > 0.0,
-                "area_sobreposta_ha": round(prodes_intersect_area, 4),
+                "criterio_temporal": "Histórico Completo (Sem restrição de data)",
+                "detectado": prodes_area_ha > 0.0,
+                "area_sobreposta_ha": prodes_area_ha,
                 "anos_detectados": sorted(list(anos_detectados)),
-                "biomas_detectados": sorted(list(biomas_detectados)),
-                "geometrias": prodes_features
+                "bases_detectadas": sorted(list(bases_detectadas)),
+                "geometrias": prodes_geojson
             },
             "diagnostico_servidores": diagnostico,
             "geojson_car": json.loads(geojson_str)
