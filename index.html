@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Validação Socioambiental - Paraná (MCR 2-9)</title>
+    <base target="_top">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+      body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; background-color: #f4f6f8; margin: 0; }
+      .container { max-width: 900px; margin: 0 auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+      
+      @media print {
+        body { background-color: white; padding: 0; }
+        .no-print { display: none !important; }
+        .container { box-shadow: none; border: none; padding: 0; }
+        #map { border: 1px solid #000; }
+      }
+
+      h2 { color: #1b4332; margin-top: 0; font-size: 22px; border-bottom: 2px solid #1b4332; padding-bottom: 10px; }
+      p.subtitle { color: #555; font-size: 14px; margin-bottom: 20px; }
+      
+      .input-group { display: flex; gap: 10px; margin-bottom: 20px; }
+      input[type="text"] { flex: 1; padding: 12px; border: 1px solid #cccccc; border-radius: 6px; font-size: 14px; }
+      button { background-color: #2d6a4f; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+      button:hover { background-color: #1b4332; }
+      .btn-imprimir { background-color: #1d3557; margin-top: 15px; width: 100%; }
+      .btn-imprimir:hover { background-color: #457b9d; }
+      
+      #parecerBox { display: none; margin-top: 20px; border: 1px solid #ccc; padding: 20px; border-radius: 8px; background: #fff; line-height: 1.6; }
+      .cabecalho-parecer { text-align: center; margin-bottom: 20px; }
+      .cabecalho-parecer h3 { margin: 0; color: #333; font-size: 18px; text-transform: uppercase; }
+      .cabecalho-parecer p { margin: 5px 0 0 0; font-size: 12px; color: #666; }
+      
+      .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; font-size: 14px; }
+      .info-grid div { background: #f8f9fa; padding: 10px; border-radius: 4px; border: 1px solid #eee; }
+      
+      .status-conforme { color: #155724; font-weight: bold; font-size: 16px; padding: 10px; background: #d4edda; border-radius: 4px; text-align: center; border: 1px solid #c3e6cb; }
+      .status-bloqueio { color: #721c24; font-weight: bold; font-size: 16px; padding: 10px; background: #f8d7da; border-radius: 4px; text-align: center; border: 1px solid #f5c6cb; }
+
+      .fundamentacao { font-size: 12px; color: #555; margin-top: 20px; text-align: justify; padding-top: 15px; border-top: 1px dashed #ccc; }
+      
+      #mapaWrapper { display: none; margin-top: 20px; position: relative; }
+      #map { height: 420px; width: 100%; border-radius: 8px; border: 1px solid #dddddd; }
+      
+      .legenda-mapa { position: absolute; bottom: 20px; right: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); font-size: 11px; z-index: 1000; }
+      .box-legenda { width: 12px; height: 12px; display: inline-block; margin-right: 5px; vertical-align: middle; }
+      .box-car { border: 2px solid #0056b3; background: rgba(0, 86, 179, 0.15); }
+      .box-embargo { border: 1px solid #800f2f; background: #dc3545; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2 class="no-print">🌾 Sistema de Compliance Socioambiental - Paraná</h2>
+      <p class="subtitle no-print">Validação automatizada de Crédito Rural (MCR 2-9) | SICAR-PR & IBAMA</p>
+      
+      <div class="input-group no-print">
+        <input type="text" id="carInput" placeholder="Ex: PR-4106902-..." />
+        <button onclick="buscarCAR()">Gerar Parecer</button>
+      </div>
+
+      <div id="statusLoad" class="no-print" style="display: none; padding: 15px; font-weight: bold;"></div>
+
+      <div id="parecerBox">
+        <div class="cabecalho-parecer">
+          <h3>Parecer Técnico de Conformidade Socioambiental</h3>
+          <p>Operação de Crédito Rural — Verificação de Sobreposição Espacial</p>
+        </div>
+
+        <div class="info-grid">
+          <div><b>Código do Imóvel (CAR):</b> <br><span id="outCar"></span></div>
+          <div><b>Data da Consulta:</b> <br><span id="outData"></span></div>
+          <div><b>Município/UF:</b> <br><span id="outMun"></span></div>
+          <div><b>Área Declarada:</b> <br><span id="outArea"></span></div>
+        </div>
+
+        <div id="outStatus"></div>
+
+        <div class="fundamentacao">
+          <b>Fundamentação Regulatória (Resolução CMN / MCR 2-9):</b><br>
+          Em cumprimento às diretrizes do Manual de Crédito Rural, veda-se a concessão de financiamento agropecuário a empreendimentos situados em áreas com embargo ambiental vigente lavrado pelo órgão competente (IBAMA), ressalvadas as operações previstas nas exceções normativas do Banco Central do Brasil.
+        </div>
+
+        <div id="mapaWrapper">
+          <div id="map"></div>
+          <div class="legenda-mapa">
+            <b>Legenda:</b><br>
+            <span class="box-legenda box-car"></span> Perímetro CAR-PR<br>
+            <span class="box-legenda box-embargo"></span> Embargo IBAMA Detectado
+          </div>
+        </div>
+        
+        <button class="btn-imprimir no-print" onclick="window.print()">🖨️ Imprimir Parecer / Salvar PDF</button>
+      </div>
+    </div>
+
+    <script>
+      const API_URL = "https://api-compliance-pr.onrender.com";
+      var map = null, carLayer = null, embargoLayer = null;
+
+      async function buscarCAR() {
+        var cod = document.getElementById("carInput").value.trim();
+        var parecerBox = document.getElementById("parecerBox");
+        var load = document.getElementById("statusLoad");
+        var mapaWrapper = document.getElementById("mapaWrapper");
+        
+        if(!cod) { alert("Por favor, introduza o código do CAR!"); return; }
+
+        parecerBox.style.display = "none";
+        mapaWrapper.style.display = "none";
+        load.style.display = "block";
+        load.innerHTML = "⏳ A consultar a base do Paraná e servidores do IBAMA na nuvem...";
+
+        try {
+          const response = await fetch(`${API_URL}/consultar/${encodeURIComponent(cod)}`);
+          const res = await response.json();
+          load.style.display = "none";
+
+          if (response.ok && res.status === "sucesso") {
+            const d = res.dados;
+            parecerBox.style.display = "block";
+            
+            document.getElementById("outCar").innerText = d.cod_imovel;
+            document.getElementById("outData").innerText = new Date().toLocaleDateString('pt-BR');
+            document.getElementById("outMun").innerText = `${d.municipio} / ${d.uf}`;
+            document.getElementById("outArea").innerText = `${d.area_declarada_ha} ha`;
+
+            const outStatus = document.getElementById("outStatus");
+            if (d.embargo_ibama.bloqueado) {
+              outStatus.className = "status-bloqueio";
+              outStatus.innerHTML = `PARECER: IMPEDIMENTO DE CRÉDITO RURAL DETETADO<br>
+                <span style='font-size:12px; font-weight:normal;'>Sobreposição de ${d.embargo_ibama.area_sobreposta_ha} ha com Embargo Federal (IBAMA).</span>`;
+            } else {
+              outStatus.className = "status-conforme";
+              outStatus.innerHTML = "PARECER: IMÓVEL CONFORME<br><span style='font-size:12px; font-weight:normal;'>Sem sobreposições impeditivas identificadas na base consultada.</span>";
+            }
+
+            if (d.geojson_car) {
+              mapaWrapper.style.display = "block";
+              renderizarMapa(d.geojson_car, d.embargo_ibama.geometrias);
+            }
+          } else {
+            load.style.display = "block";
+            load.innerHTML = "❌ <b>Aviso:</b> " + (res.detail || "Imóvel não localizado.");
+          }
+        } catch (err) {
+          load.style.display = "block";
+          load.innerHTML = "❌ <b>Erro de ligação:</b> " + err.message;
+        }
+      }
+
+      function renderizarMapa(geoCar, geometriasEmbargo) {
+        if (!map) {
+          map = L.map('map', { zoomControl: false });
+          L.control.zoom({ position: 'topright' }).addTo(map);
+          L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
+          L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}').addTo(map);
+        }
+        
+        if (carLayer) map.removeLayer(carLayer);
+        if (embargoLayer) map.removeLayer(embargoLayer);
+
+        carLayer = L.geoJSON(geoCar, { style: { color: "#0056b3", weight: 3, fillOpacity: 0.15 } }).addTo(map);
+
+        if (geometriasEmbargo && geometriasEmbargo.length > 0) {
+          embargoLayer = L.geoJSON(geometriasEmbargo, {
+            style: { color: "#800f2f", weight: 2, fillColor: "#dc3545", fillOpacity: 0.7 }
+          }).addTo(map);
+        }
+
+        map.fitBounds(carLayer.getBounds(), { padding: [15, 15] });
+        setTimeout(function(){ map.invalidateSize(); }, 400);
+      }
+    </script>
+  </body>
+</html>
