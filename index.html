@@ -12,7 +12,6 @@
       :root {
         --cresol-orange: #f37021;
         --cresol-orange-dark: #d95a10;
-        --cresol-orange-light: #fff7ed;
         --cresol-teal: #004851;
         --cresol-teal-dark: #00333a;
         --cresol-teal-light: #eaf4f5;
@@ -47,7 +46,6 @@
         #map { border: 1px solid #475569; }
       }
 
-      /* Cabeçalho Institucional Cresol */
       .header-cresol {
         display: flex;
         align-items: center;
@@ -103,7 +101,6 @@
         margin-bottom: 22px;
       }
 
-      /* Formulário de Busca */
       .input-group {
         display: flex;
         gap: 12px;
@@ -134,15 +131,11 @@
         font-weight: 700;
         cursor: pointer;
         font-size: 14px;
-        transition: background-color 0.2s, transform 0.1s;
+        transition: background-color 0.2s;
       }
 
       button:hover {
         background-color: var(--cresol-orange-dark);
-      }
-
-      button:active {
-        transform: scale(0.98);
       }
 
       .btn-imprimir {
@@ -169,7 +162,6 @@
         border-left: 4px solid var(--cresol-teal);
       }
 
-      /* Parecer e Resultados */
       #parecerBox {
         display: none;
         margin-top: 25px;
@@ -192,7 +184,6 @@
         color: var(--cresol-teal);
         font-size: 18px;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
       }
 
       .cabecalho-parecer p {
@@ -227,10 +218,6 @@
         color: var(--cresol-teal-dark);
       }
 
-      .mcr-box b {
-        color: var(--cresol-teal);
-      }
-
       .status-box {
         padding: 15px;
         border-radius: 8px;
@@ -238,7 +225,6 @@
         margin-bottom: 18px;
         font-weight: 700;
         font-size: 15px;
-        letter-spacing: 0.3px;
       }
 
       .status-conforme {
@@ -255,8 +241,6 @@
 
       .box-parecer-tecnico {
         background: #ffffff;
-        border-left: 4px solid var(--cresol-orange);
-        box-shadow: 0 2px 6px rgba(0,0,0,0.04);
         border: 1px solid #f1f5f9;
         border-left: 4px solid var(--cresol-orange);
         padding: 14px 16px;
@@ -298,7 +282,7 @@
       }
 
       #map {
-        height: 480px;
+        height: 500px;
         width: 100%;
         border-radius: 8px;
         border: 1.5px solid var(--border-color);
@@ -328,8 +312,8 @@
       }
 
       .box-car {
-        border: 2px solid #0056b3;
-        background: rgba(0, 86, 179, 0.15);
+        border: 2px solid #004851;
+        background: rgba(0, 72, 81, 0.15);
       }
 
       .box-embargo {
@@ -344,19 +328,24 @@
 
       .box-prodes-pre {
         border: 1px solid #b35300;
-        background: #fd7e14;
+        background: #f37021;
       }
 
-      .prodes-label {
+      /* Rótulo permanente de Ano e Área sobre os polígonos */
+      .leaflet-tooltip.badge-prodes {
         background: rgba(0, 72, 81, 0.92);
         color: #ffffff;
-        font-weight: 600;
+        font-weight: 700;
         font-size: 11px;
-        border: 1px solid var(--cresol-orange);
+        border: 1.5px solid var(--cresol-orange);
         border-radius: 4px;
-        padding: 3px 6px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
-        pointer-events: none;
+        padding: 3px 7px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+        white-space: nowrap;
+      }
+
+      .leaflet-tooltip.badge-prodes::before {
+        display: none;
       }
     </style>
   </head>
@@ -364,7 +353,6 @@
     <div class="container">
       <div class="header-cresol no-print">
         <div class="brand-group">
-          <!-- Logo Vetorial Simbólico Cresol -->
           <svg class="logo-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
             <circle cx="50" cy="50" r="48" fill="#004851"/>
             <path d="M50 18C34 18 22 30 22 46C22 58 29 68 40 72L50 50L60 72C71 68 78 58 78 46C78 30 66 18 50 18Z" fill="#F37021"/>
@@ -376,7 +364,7 @@
             <h1>Consulta Prodes - Crédito Direcionado Horizonte</h1>
           </div>
         </div>
-        <div class="header-badge">MCR 2-9 / Res. CMN 5.303</div>
+        <div class="header-badge">Filtro: PRODES ≥ 2004</div>
       </div>
 
       <p class="subtitle no-print">
@@ -426,7 +414,7 @@
             <span id="detalheIbama"></span>
           </div>
           <div class="check-card" id="cardProdes">
-            <b>PRODES BiomasBR / INPE (Item 17):</b><br>
+            <b>PRODES BiomasBR / INPE (≥ 2004):</b><br>
             <span id="detalheProdes"></span>
           </div>
         </div>
@@ -438,7 +426,7 @@
             <span class="box-legenda box-car"></span> Perímetro CAR-PR<br>
             <span class="box-legenda box-embargo"></span> Embargo IBAMA<br>
             <span class="box-legenda box-prodes-pos"></span> PRODES Pós-31/07/2019 (Impeditivo)<br>
-            <span class="box-legenda box-prodes-pre"></span> PRODES Pré-31/07/2019
+            <span class="box-legenda box-prodes-pre"></span> PRODES Histórico (2004 a 2019)
           </div>
         </div>
 
@@ -505,8 +493,8 @@
             document.getElementById("detalheProdes").innerHTML = mcr.supressao_pos_2019_detectada
               ? `<span class="badge-alert">SUPRESSÃO PÓS-2019</span><br>Área: <b>${mcr.area_supressao_pos_2019_ha} ha</b> (Anos: ${mcr.anos_pos_2019.join(", ")})`
               : (mcr.area_supressao_historica_pre_2019_ha > 0 
-                  ? `<span class="badge-ok">HISTÓRICO PRÉ-2019</span><br>${mcr.area_supressao_historica_pre_2019_ha} ha anterior a 31/07/2019`
-                  : `<span class="badge-ok">CONFORME</span><br>Sem alertas de desmatamento`);
+                  ? `<span class="badge-ok">HISTÓRICO (2004-2019)</span><br>${mcr.area_supressao_historica_pre_2019_ha} ha anteriores a 31/07/2019`
+                  : `<span class="badge-ok">CONFORME</span><br>Sem supressão desde 2004`);
 
             // Mapa Leaflet
             if (d.geojson_car) {
@@ -547,7 +535,7 @@
           }).addTo(map);
         }
 
-        // 3. PRODES com rótulos de Ano e Área no centro
+        // 3. PRODES com rótulo permanente e popup detalhado
         if (featuresProdes && featuresProdes.length > 0) {
           prodesLayer = L.geoJSON(featuresProdes, {
             style: function(feat) {
@@ -556,34 +544,36 @@
                 color: pos19 ? "#7f1d1d" : "#b35300",
                 weight: 2,
                 fillColor: pos19 ? "#dc2626" : "#f37021",
-                fillOpacity: 0.72
+                fillOpacity: 0.75
               };
             },
             onEachFeature: function(feat, layer) {
               var p = feat.properties || {};
               var anoTxt = p.ano || "N/D";
-              var areaTxt = p.area_ha ? p.area_ha + " ha" : "";
-              var norma = p.pos_2019 ? "⚠️ Pós-31/07/2019 (Impeditivo MCR 17)" : "ℹ️ Anterior a 31/07/2019";
+              var areaTxt = p.area_ha ? p.area_ha.toFixed(2) + " ha" : "";
+              var norma = p.pos_2019 ? "⚠️ Pós-31/07/2019 (Impeditivo MCR 17)" : "ℹ️ Histórico (2004 a 2019)";
 
+              // Detalhamento em Popup
               layer.bindPopup(`
                 <div style="font-size:12px; line-height:1.6;">
-                  <b style="color:var(--cresol-orange); font-size:13px;">Polígono PRODES (INPE)</b><br>
-                  <b>Ano da Supressão:</b> ${anoTxt}<br>
-                  <b>Área Sobreposta:</b> ${areaTxt}<br>
-                  <b>Enquadramento:</b> ${norma}
+                  <b style="color:var(--cresol-orange); font-size:13px;">Apontamento PRODES (INPE)</b><br>
+                  <b>Ano da Ocorrência:</b> ${anoTxt}<br>
+                  <b>Área da Supressão:</b> ${areaTxt}<br>
+                  <b>Status MCR 2-9:</b> ${norma}
                 </div>
               `);
 
-              layer.bindTooltip(`Ano: ${anoTxt} | ${areaTxt}`, {
+              // Rótulo permanente estampado sobre o polígono
+              layer.bindTooltip(`Ano: ${anoTxt} • ${areaTxt}`, {
                 permanent: true,
                 direction: "center",
-                className: "prodes-label"
+                className: "badge-prodes"
               });
             }
           }).addTo(map);
         }
 
-        map.fitBounds(carLayer.getBounds(), { padding: [25, 25] });
+        map.fitBounds(carLayer.getBounds(), { padding: [30, 30] });
         setTimeout(function() { map.invalidateSize(); }, 350);
       }
     </script>
