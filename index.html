@@ -9,66 +9,238 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <style>
-      body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; background-color: #f4f6f8; margin: 0; }
-      .container { max-width: 900px; margin: 0 auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-      
-      @media print {
-        body { background-color: white; padding: 0; }
-        .no-print { display: none !important; }
-        .container { box-shadow: none; border: none; padding: 0; }
-        #map { border: 1px solid #000; }
+      body {
+        font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
+        padding: 24px 16px;
+        background-color: #f1f5f9;
+        color: #1e293b;
+        margin: 0;
+      }
+      .container {
+        max-width: 920px;
+        margin: 0 auto;
+        background: #ffffff;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
       }
 
-      h2 { color: #1b4332; margin-top: 0; font-size: 22px; border-bottom: 2px solid #1b4332; padding-bottom: 10px; }
-      p.subtitle { color: #555; font-size: 14px; margin-bottom: 20px; }
-      
-      .input-group { display: flex; gap: 10px; margin-bottom: 20px; }
-      input[type="text"] { flex: 1; padding: 12px; border: 1px solid #cccccc; border-radius: 6px; font-size: 14px; }
-      button { background-color: #2d6a4f; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; cursor: pointer; }
-      button:hover { background-color: #1b4332; }
-      .btn-imprimir { background-color: #1d3557; margin-top: 15px; width: 100%; }
-      .btn-imprimir:hover { background-color: #457b9d; }
-      
-      #parecerBox { display: none; margin-top: 20px; border: 1px solid #ccc; padding: 20px; border-radius: 8px; background: #fff; line-height: 1.6; }
-      .cabecalho-parecer { text-align: center; margin-bottom: 20px; }
-      .cabecalho-parecer h3 { margin: 0; color: #333; font-size: 18px; text-transform: uppercase; }
-      .cabecalho-parecer p { margin: 5px 0 0 0; font-size: 12px; color: #666; }
-      
-      .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; font-size: 14px; }
-      .info-grid div { background: #f8f9fa; padding: 10px; border-radius: 4px; border: 1px solid #eee; }
-      
-      .status-box { padding: 12px; border-radius: 6px; text-align: center; margin-bottom: 15px; font-weight: bold; font-size: 15px; }
-      .status-conforme { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-      .status-bloqueio { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+      @media print {
+        body { background-color: #ffffff; padding: 0; }
+        .no-print { display: none !important; }
+        .container { box-shadow: none; border: none; padding: 0; max-width: 100%; }
+        #map { border: 1px solid #475569; }
+      }
 
-      .checks-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; font-size: 13px; }
-      .check-card { padding: 10px; border-radius: 4px; border: 1px solid #ddd; background: #fafafa; }
-      .badge-ok { color: #155724; font-weight: bold; }
-      .badge-alert { color: #c0392b; font-weight: bold; }
+      h2 {
+        color: #1b4332;
+        margin-top: 0;
+        font-size: 24px;
+        border-bottom: 2px solid #2d6a4f;
+        padding-bottom: 12px;
+      }
+      p.subtitle {
+        color: #64748b;
+        font-size: 14px;
+        margin-bottom: 24px;
+      }
 
-      .fundamentacao { font-size: 12px; color: #555; margin-top: 15px; text-align: justify; padding-top: 10px; border-top: 1px dashed #ccc; }
-      
-      #mapaWrapper { display: none; margin-top: 20px; position: relative; }
-      #map { height: 440px; width: 100%; border-radius: 8px; border: 1px solid #dddddd; }
-      
-      .legenda-mapa { position: absolute; bottom: 20px; right: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px 14px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.25); font-size: 11px; z-index: 1000; line-height: 1.8; }
-      .box-legenda { width: 14px; height: 14px; display: inline-block; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
-      .box-car { border: 2px solid #0056b3; background: rgba(0, 86, 179, 0.15); }
-      .box-embargo { border: 1px solid #780016; background: #dc3545; }
-      .box-prodes { border: 1px solid #b35300; background: #fd7e14; }
+      .input-group {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+      input[type="text"] {
+        flex: 1;
+        padding: 12px 14px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 14px;
+        outline: none;
+      }
+      input[type="text"]:focus {
+        border-color: #2d6a4f;
+      }
+      button {
+        background-color: #2d6a4f;
+        color: #ffffff;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+      button:hover {
+        background-color: #1b4332;
+      }
+      .btn-imprimir {
+        background-color: #1e3a8a;
+        margin-top: 20px;
+        width: 100%;
+        padding: 14px;
+        font-size: 15px;
+      }
+      .btn-imprimir:hover {
+        background-color: #172554;
+      }
+
+      #statusLoad {
+        display: none;
+        padding: 14px;
+        background-color: #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        margin-bottom: 20px;
+      }
+
+      #parecerBox {
+        display: none;
+        margin-top: 25px;
+        border: 1px solid #e2e8f0;
+        padding: 25px;
+        border-radius: 8px;
+        background: #ffffff;
+        line-height: 1.6;
+      }
+      .cabecalho-parecer {
+        text-align: center;
+        margin-bottom: 22px;
+      }
+      .cabecalho-parecer h3 {
+        margin: 0;
+        color: #0f172a;
+        font-size: 18px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .cabecalho-parecer p {
+        margin: 6px 0 0 0;
+        font-size: 13px;
+        color: #64748b;
+      }
+
+      .info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-bottom: 18px;
+        font-size: 14px;
+      }
+      .info-grid div {
+        background: #f8fafc;
+        padding: 12px;
+        border-radius: 6px;
+        border: 1px solid #e2e8f0;
+      }
+
+      .status-box {
+        padding: 14px;
+        border-radius: 6px;
+        text-align: center;
+        margin-bottom: 18px;
+        font-weight: 700;
+        font-size: 15px;
+      }
+      .status-conforme {
+        background: #dcfce7;
+        color: #14532d;
+        border: 1px solid #86efac;
+      }
+      .status-bloqueio {
+        background: #fee2e2;
+        color: #7f1d1d;
+        border: 1px solid #fca5a5;
+      }
+
+      .checks-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-bottom: 18px;
+        font-size: 13px;
+      }
+      .check-card {
+        padding: 12px;
+        border-radius: 6px;
+        border: 1px solid #e2e8f0;
+        background: #f8fafc;
+      }
+      .badge-ok {
+        color: #15803d;
+        font-weight: 700;
+      }
+      .badge-alert {
+        color: #b91c1c;
+        font-weight: 700;
+      }
+
+      .fundamentacao {
+        font-size: 12px;
+        color: #64748b;
+        margin-top: 18px;
+        text-align: justify;
+        padding-top: 12px;
+        border-top: 1px dashed #cbd5e1;
+      }
+
+      #mapaWrapper {
+        display: none;
+        margin-top: 22px;
+        position: relative;
+      }
+      #map {
+        height: 440px;
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid #cbd5e1;
+      }
+
+      .legenda-mapa {
+        position: absolute;
+        bottom: 20px;
+        right: 12px;
+        background: rgba(255, 255, 255, 0.95);
+        padding: 10px 14px;
+        border-radius: 6px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+        font-size: 12px;
+        z-index: 1000;
+        line-height: 1.8;
+      }
+      .box-legenda {
+        width: 14px;
+        height: 14px;
+        display: inline-block;
+        margin-right: 6px;
+        vertical-align: middle;
+        border-radius: 2px;
+      }
+      .box-car {
+        border: 2px solid #0056b3;
+        background: rgba(0, 86, 179, 0.15);
+      }
+      .box-embargo {
+        border: 1px solid #780016;
+        background: #dc3545;
+      }
+      .box-prodes {
+        border: 1px solid #b35300;
+        background: #fd7e14;
+      }
     </style>
   </head>
   <body>
     <div class="container">
       <h2 class="no-print">🌾 Sistema de Compliance Socioambiental - Paraná</h2>
       <p class="subtitle no-print">Validação automatizada de Crédito Rural (MCR 2-9) | SICAR-PR, IBAMA & PRODES (INPE)</p>
-      
+
       <div class="input-group no-print">
         <input type="text" id="carInput" placeholder="Ex: PR-4109401-2A476EE49C60405DBC19620FC2399A13" />
         <button onclick="buscarCAR()">Gerar Parecer</button>
       </div>
 
-      <div id="statusLoad" class="no-print" style="display: none; padding: 15px; font-weight: bold;"></div>
+      <div id="statusLoad" class="no-print"></div>
 
       <div id="parecerBox">
         <div class="cabecalho-parecer">
@@ -77,10 +249,10 @@
         </div>
 
         <div class="info-grid">
-          <div><b>Código do Imóvel (CAR):</b> <br><span id="outCar"></span></div>
-          <div><b>Data da Consulta:</b> <br><span id="outData"></span></div>
-          <div><b>Município/UF:</b> <br><span id="outMun"></span></div>
-          <div><b>Área Declarada:</b> <br><span id="outArea"></span></div>
+          <div><b>Código do Imóvel (CAR):</b><br><span id="outCar"></span></div>
+          <div><b>Data da Consulta:</b><br><span id="outData"></span></div>
+          <div><b>Município/UF:</b><br><span id="outMun"></span></div>
+          <div><b>Área Declarada:</b><br><span id="outArea"></span></div>
         </div>
 
         <div id="outStatus" class="status-box"></div>
@@ -98,7 +270,7 @@
 
         <div class="fundamentacao">
           <b>Fundamentação Regulatória (Resolução CMN / MCR 2-9):</b><br>
-          Em cumprimento às diretrizes do Manual de Crédito Rural do Banco Central do Brasil, veda-se a concessão de crédito agropecuário a empreendimentos situados em áreas com embargo ambiental vigente lavrado por órgão competente (IBAMA/IAT) ou em sobreposição a polígonos de conversão ilegal de vegetação nativa identificados por sistemas oficiais de monitoramento.
+          Em cumprimento às diretrizes do Manual de Crédito Rural do Banco Central do Brasil, veda-se a concessão de crédito agropecuário a empreendimentos situados em áreas com embargo ambiental vigente lavrado por órgão competente (IBAMA/IAT) ou em sobreposição a polígonos de conversão não autorizada de vegetação nativa apurados por sistemas oficiais de monitoramento público.
         </div>
 
         <div id="mapaWrapper">
@@ -110,7 +282,7 @@
             <span class="box-legenda box-prodes"></span> Desmatamento PRODES (INPE)
           </div>
         </div>
-        
+
         <button class="btn-imprimir no-print" onclick="window.print()">🖨️ Imprimir Parecer / Salvar PDF</button>
       </div>
     </div>
@@ -124,8 +296,11 @@
         var parecerBox = document.getElementById("parecerBox");
         var load = document.getElementById("statusLoad");
         var mapaWrapper = document.getElementById("mapaWrapper");
-        
-        if(!cod) { alert("Por favor, introduza o código do CAR!"); return; }
+
+        if (!cod) {
+          alert("Por favor, introduza o código do CAR!");
+          return;
+        }
 
         parecerBox.style.display = "none";
         mapaWrapper.style.display = "none";
@@ -140,7 +315,7 @@
           if (response.ok && res.status === "sucesso") {
             const d = res.dados;
             parecerBox.style.display = "block";
-            
+
             document.getElementById("outCar").innerText = d.cod_imovel;
             document.getElementById("outData").innerText = new Date().toLocaleDateString('pt-BR');
             document.getElementById("outMun").innerText = `${d.municipio} / ${d.uf}`;
@@ -175,7 +350,7 @@
               outStatus.innerHTML = "PARECER: IMÓVEL CONFORME (MCR 2-9)<br><span style='font-size:12px; font-weight:normal;'>Nenhuma sobreposição restritiva identificada nas bases consultadas.</span>";
             }
 
-            // Renderização do Mapa Leaflet
+            // Renderização no Mapa Leaflet
             if (d.geojson_car) {
               mapaWrapper.style.display = "block";
               renderizarMapa(d.geojson_car, ibama.geometrias, prodes.geometrias);
@@ -197,33 +372,33 @@
           L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
           L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}').addTo(map);
         }
-        
-        // Limpar camadas anteriores
+
+        // Limpeza de camadas anteriores
         if (carLayer) map.removeLayer(carLayer);
         if (embargoLayer) map.removeLayer(embargoLayer);
         if (prodesLayer) map.removeLayer(prodesLayer);
 
-        // 1. Perímetro do CAR (Azul)
-        carLayer = L.geoJSON(geoCar, { 
-          style: { color: "#0056b3", weight: 3, fillOpacity: 0.15 } 
+        // 1. Perímetro CAR-PR (Azul)
+        carLayer = L.geoJSON(geoCar, {
+          style: { color: "#0056b3", weight: 3, fillOpacity: 0.15 }
         }).addTo(map);
 
-        // 2. Embargos IBAMA (Vermelho)
+        // 2. Embargos Federais IBAMA (Vermelho)
         if (geometriasEmbargo && geometriasEmbargo.length > 0) {
           embargoLayer = L.geoJSON(geometriasEmbargo, {
             style: { color: "#780016", weight: 2, fillColor: "#dc3545", fillOpacity: 0.65 }
           }).addTo(map);
         }
 
-        // 3. Desmatamento PRODES (Laranja/Âmbar)
+        // 3. Desmatamento PRODES INPE (Laranja/Âmbar)
         if (geometriasProdes && geometriasProdes.length > 0) {
           prodesLayer = L.geoJSON(geometriasProdes, {
             style: { color: "#b35300", weight: 2, fillColor: "#fd7e14", fillOpacity: 0.7 }
           }).addTo(map);
         }
 
-        map.fitBounds(carLayer.getBounds(), { padding: [20, 20] });
-        setTimeout(function(){ map.invalidateSize(); }, 350);
+        map.fitBounds(carLayer.getBounds(), { padding: [25, 25] });
+        setTimeout(function() { map.invalidateSize(); }, 350);
       }
     </script>
   </body>
