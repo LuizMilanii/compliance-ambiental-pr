@@ -3,121 +3,202 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Validação Socioambiental - Paraná (MCR 2-9)</title>
+    <title>Consulta Prodes - Crédito Direcionado Horizonte | Cresol</title>
     <base target="_top">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <style>
+      :root {
+        --cresol-orange: #f37021;
+        --cresol-orange-dark: #d95a10;
+        --cresol-orange-light: #fff7ed;
+        --cresol-teal: #004851;
+        --cresol-teal-dark: #00333a;
+        --cresol-teal-light: #eaf4f5;
+        --text-dark: #1e293b;
+        --text-muted: #64748b;
+        --bg-page: #f1f5f9;
+        --border-color: #cbd5e1;
+      }
+
       body {
         font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
         padding: 24px 16px;
-        background-color: #f1f5f9;
-        color: #1e293b;
+        background-color: var(--bg-page);
+        color: var(--text-dark);
         margin: 0;
       }
+
       .container {
-        max-width: 940px;
+        max-width: 960px;
         margin: 0 auto;
         background: #ffffff;
-        padding: 30px;
-        border-radius: 10px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        padding: 32px;
+        border-radius: 12px;
+        box-shadow: 0 4px 16px rgba(0, 72, 81, 0.08);
+        border-top: 5px solid var(--cresol-orange);
       }
 
       @media print {
         body { background-color: #ffffff; padding: 0; }
         .no-print { display: none !important; }
-        .container { box-shadow: none; border: none; padding: 0; max-width: 100%; }
+        .container { box-shadow: none; border: none; padding: 0; max-width: 100%; border-top: none; }
         #map { border: 1px solid #475569; }
       }
 
-      h2 {
-        color: #1b4332;
-        margin-top: 0;
-        font-size: 24px;
-        border-bottom: 2px solid #2d6a4f;
-        padding-bottom: 12px;
-      }
-      p.subtitle {
-        color: #64748b;
-        font-size: 14px;
+      /* Cabeçalho Institucional Cresol */
+      .header-cresol {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 2px solid var(--cresol-teal-light);
+        padding-bottom: 18px;
         margin-bottom: 24px;
+        flex-wrap: wrap;
+        gap: 16px;
       }
 
+      .brand-group {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .logo-svg {
+        width: 48px;
+        height: 48px;
+      }
+
+      .brand-title h1 {
+        margin: 0;
+        font-size: 20px;
+        color: var(--cresol-teal);
+        font-weight: 800;
+        letter-spacing: -0.3px;
+      }
+
+      .brand-title span {
+        font-size: 13px;
+        color: var(--cresol-orange);
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+      }
+
+      .header-badge {
+        background-color: var(--cresol-teal-light);
+        color: var(--cresol-teal);
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 700;
+        border: 1px solid rgba(0, 72, 81, 0.15);
+      }
+
+      .subtitle {
+        color: var(--text-muted);
+        font-size: 14px;
+        margin-top: -12px;
+        margin-bottom: 22px;
+      }
+
+      /* Formulário de Busca */
       .input-group {
         display: flex;
         gap: 12px;
-        margin-bottom: 20px;
+        margin-bottom: 22px;
       }
+
       input[type="text"] {
         flex: 1;
-        padding: 12px 14px;
-        border: 1px solid #cbd5e1;
-        border-radius: 6px;
+        padding: 13px 16px;
+        border: 1.5px solid var(--border-color);
+        border-radius: 8px;
         font-size: 14px;
         outline: none;
+        transition: all 0.2s;
       }
+
       input[type="text"]:focus {
-        border-color: #2d6a4f;
+        border-color: var(--cresol-orange);
+        box-shadow: 0 0 0 3px rgba(243, 112, 33, 0.15);
       }
+
       button {
-        background-color: #2d6a4f;
+        background-color: var(--cresol-orange);
         color: #ffffff;
         border: none;
-        padding: 12px 24px;
-        border-radius: 6px;
-        font-weight: 600;
+        padding: 13px 26px;
+        border-radius: 8px;
+        font-weight: 700;
         cursor: pointer;
-        transition: background-color 0.2s;
+        font-size: 14px;
+        transition: background-color 0.2s, transform 0.1s;
       }
+
       button:hover {
-        background-color: #1b4332;
+        background-color: var(--cresol-orange-dark);
       }
+
+      button:active {
+        transform: scale(0.98);
+      }
+
       .btn-imprimir {
-        background-color: #1e3a8a;
-        margin-top: 20px;
+        background-color: var(--cresol-teal);
+        margin-top: 22px;
         width: 100%;
         padding: 14px;
         font-size: 15px;
       }
+
       .btn-imprimir:hover {
-        background-color: #172554;
+        background-color: var(--cresol-teal-dark);
       }
 
       #statusLoad {
         display: none;
-        padding: 14px;
-        background-color: #e2e8f0;
-        border-radius: 6px;
+        padding: 14px 18px;
+        background-color: var(--cresol-teal-light);
+        color: var(--cresol-teal);
+        border-radius: 8px;
         font-size: 14px;
         margin-bottom: 20px;
+        font-weight: 600;
+        border-left: 4px solid var(--cresol-teal);
       }
 
+      /* Parecer e Resultados */
       #parecerBox {
         display: none;
         margin-top: 25px;
-        border: 1px solid #e2e8f0;
-        padding: 25px;
-        border-radius: 8px;
+        border: 1px solid var(--border-color);
+        padding: 26px;
+        border-radius: 10px;
         background: #ffffff;
         line-height: 1.6;
       }
+
       .cabecalho-parecer {
         text-align: center;
-        margin-bottom: 22px;
+        margin-bottom: 24px;
+        border-bottom: 1px solid #e2e8f0;
+        padding-bottom: 16px;
       }
+
       .cabecalho-parecer h3 {
         margin: 0;
-        color: #0f172a;
+        color: var(--cresol-teal);
         font-size: 18px;
         text-transform: uppercase;
         letter-spacing: 0.5px;
       }
+
       .cabecalho-parecer p {
         margin: 6px 0 0 0;
         font-size: 13px;
-        color: #64748b;
+        color: var(--text-muted);
       }
 
       .info-grid {
@@ -125,55 +206,64 @@
         grid-template-columns: repeat(2, 1fr);
         gap: 12px;
         margin-bottom: 18px;
-        font-size: 14px;
+        font-size: 13.5px;
       }
+
       .info-grid div {
         background: #f8fafc;
-        padding: 12px;
+        padding: 12px 14px;
         border-radius: 6px;
         border: 1px solid #e2e8f0;
+        border-left: 3px solid var(--cresol-teal);
       }
 
       .mcr-box {
-        background: #eff6ff;
-        border: 1px solid #bfdbfe;
-        border-radius: 6px;
-        padding: 15px;
+        background: var(--cresol-teal-light);
+        border: 1px solid rgba(0, 72, 81, 0.2);
+        border-radius: 8px;
+        padding: 16px;
         margin-bottom: 18px;
         font-size: 13px;
-        color: #1e3a8a;
+        color: var(--cresol-teal-dark);
       }
+
       .mcr-box b {
-        color: #172554;
+        color: var(--cresol-teal);
       }
 
       .status-box {
-        padding: 14px;
-        border-radius: 6px;
+        padding: 15px;
+        border-radius: 8px;
         text-align: center;
         margin-bottom: 18px;
         font-weight: 700;
         font-size: 15px;
+        letter-spacing: 0.3px;
       }
+
       .status-conforme {
         background: #dcfce7;
         color: #14532d;
-        border: 1px solid #86efac;
+        border: 1.5px solid #86efac;
       }
+
       .status-bloqueio {
         background: #fee2e2;
         color: #7f1d1d;
-        border: 1px solid #fca5a5;
+        border: 1.5px solid #fca5a5;
       }
 
       .box-parecer-tecnico {
-        background: #f8fafc;
-        border-left: 4px solid #1e3a8a;
+        background: #ffffff;
+        border-left: 4px solid var(--cresol-orange);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+        border: 1px solid #f1f5f9;
+        border-left: 4px solid var(--cresol-orange);
         padding: 14px 16px;
         margin-bottom: 18px;
         font-size: 13px;
         color: #334155;
-        border-radius: 0 6px 6px 0;
+        border-radius: 0 8px 8px 0;
       }
 
       .checks-grid {
@@ -183,16 +273,19 @@
         margin-bottom: 18px;
         font-size: 13px;
       }
+
       .check-card {
-        padding: 12px;
-        border-radius: 6px;
+        padding: 12px 14px;
+        border-radius: 8px;
         border: 1px solid #e2e8f0;
         background: #f8fafc;
       }
+
       .badge-ok {
         color: #15803d;
         font-weight: 700;
       }
+
       .badge-alert {
         color: #b91c1c;
         font-weight: 700;
@@ -203,57 +296,63 @@
         margin-top: 22px;
         position: relative;
       }
+
       #map {
         height: 480px;
         width: 100%;
         border-radius: 8px;
-        border: 1px solid #cbd5e1;
+        border: 1.5px solid var(--border-color);
       }
 
       .legenda-mapa {
         position: absolute;
         bottom: 20px;
         right: 12px;
-        background: rgba(255, 255, 255, 0.95);
+        background: rgba(255, 255, 255, 0.96);
         padding: 10px 14px;
         border-radius: 6px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-        font-size: 12px;
+        box-shadow: 0 2px 10px rgba(0, 72, 81, 0.2);
+        font-size: 11.5px;
         z-index: 1000;
         line-height: 1.8;
+        border: 1px solid #e2e8f0;
       }
+
       .box-legenda {
-        width: 14px;
-        height: 14px;
+        width: 13px;
+        height: 13px;
         display: inline-block;
         margin-right: 6px;
         vertical-align: middle;
         border-radius: 2px;
       }
+
       .box-car {
         border: 2px solid #0056b3;
         background: rgba(0, 86, 179, 0.15);
       }
+
       .box-embargo {
         border: 1px solid #780016;
         background: #dc3545;
       }
+
       .box-prodes-pos {
         border: 1px solid #7f1d1d;
         background: #dc2626;
       }
+
       .box-prodes-pre {
         border: 1px solid #b35300;
         background: #fd7e14;
       }
 
-      /* Rótulo permanente no centro de cada polígono PRODES */
       .prodes-label {
-        background: rgba(15, 23, 42, 0.88);
+        background: rgba(0, 72, 81, 0.92);
         color: #ffffff;
         font-weight: 600;
         font-size: 11px;
-        border: 1px solid #f97316;
+        border: 1px solid var(--cresol-orange);
         border-radius: 4px;
         padding: 3px 6px;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
@@ -263,11 +362,29 @@
   </head>
   <body>
     <div class="container">
-      <h2 class="no-print">🌾 Sistema de Compliance Socioambiental - Paraná</h2>
-      <p class="subtitle no-print">Validação automatizada de Crédito Rural (MCR 2-9) | Resolução CMN nº 5.303</p>
+      <div class="header-cresol no-print">
+        <div class="brand-group">
+          <!-- Logo Vetorial Simbólico Cresol -->
+          <svg class="logo-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="50" cy="50" r="48" fill="#004851"/>
+            <path d="M50 18C34 18 22 30 22 46C22 58 29 68 40 72L50 50L60 72C71 68 78 58 78 46C78 30 66 18 50 18Z" fill="#F37021"/>
+            <circle cx="50" cy="46" r="14" fill="#FFFFFF"/>
+            <circle cx="50" cy="46" r="7" fill="#F37021"/>
+          </svg>
+          <div class="brand-title">
+            <span>Cooperativa Cresol</span>
+            <h1>Consulta Prodes - Crédito Direcionado Horizonte</h1>
+          </div>
+        </div>
+        <div class="header-badge">MCR 2-9 / Res. CMN 5.303</div>
+      </div>
+
+      <p class="subtitle no-print">
+        Validação territorial automatizada para concessão de crédito rural sustentável e auditoria de conformidade socioambiental.
+      </p>
 
       <div class="input-group no-print">
-        <input type="text" id="carInput" placeholder="Ex: PR-4111258-54E7D68EA796458293AD4D60FEB78EAD" />
+        <input type="text" id="carInput" placeholder="Informe o CAR (Ex: PR-4111258-54E7D68EA796458293AD4D60FEB78EAD)" />
         <button onclick="buscarCAR()">Gerar Parecer</button>
       </div>
 
@@ -275,8 +392,11 @@
 
       <div id="parecerBox">
         <div class="cabecalho-parecer">
+          <div style="font-weight: 800; color: var(--cresol-orange); font-size: 13px; text-transform: uppercase; margin-bottom: 4px;">
+            Cresol • Crédito Direcionado Horizonte
+          </div>
           <h3>Parecer Técnico de Conformidade Socioambiental</h3>
-          <p>Operação de Crédito Rural — Verificação MCR 2-9 e Resolução CMN nº 5.303</p>
+          <p>Validação Regulatória de Operação Rural — MCR 2-9 & Resolução CMN nº 5.303</p>
         </div>
 
         <div class="info-grid">
@@ -322,7 +442,7 @@
           </div>
         </div>
 
-        <button class="btn-imprimir no-print" onclick="window.print()">🖨️ Imprimir Parecer / Salvar PDF</button>
+        <button class="btn-imprimir no-print" onclick="window.print()">🖨️ Imprimir Parecer Técnico / Salvar PDF</button>
       </div>
     </div>
 
@@ -337,14 +457,14 @@
         var mapaWrapper = document.getElementById("mapaWrapper");
 
         if (!cod) {
-          alert("Por favor, introduza o código do CAR!");
+          alert("Por favor, informe o código do CAR!");
           return;
         }
 
         parecerBox.style.display = "none";
         mapaWrapper.style.display = "none";
         load.style.display = "block";
-        load.innerHTML = "⏳ A processar validação territorial no DuckDB (CAR e PRODES)...";
+        load.innerHTML = "⏳ Consultando bases territoriais (CAR-PR, PRODES e IBAMA)...";
 
         try {
           const response = await fetch(`${API_URL}/consultar/${encodeURIComponent(cod)}`);
@@ -378,7 +498,7 @@
             // IBAMA
             const ib = d.embargo_ibama;
             document.getElementById("detalheIbama").innerHTML = ib.bloqueado 
-              ? `<span class="badge-alert">IMPEDIMENTO</span><br>Sobreposição: <b>${ib.area_sobreposta_ha} ha</b>`
+              ? `<span class="badge-alert">IMPEDIMENTO DETECTADO</span><br>Sobreposição: <b>${ib.area_sobreposta_ha} ha</b>`
               : `<span class="badge-ok">CONFORME</span><br>Nenhum embargo localizado`;
 
             // PRODES
@@ -417,7 +537,7 @@
 
         // 1. CAR
         carLayer = L.geoJSON(geoCar, {
-          style: { color: "#0056b3", weight: 3, fillOpacity: 0.15 }
+          style: { color: "#004851", weight: 3, fillOpacity: 0.15 }
         }).addTo(map);
 
         // 2. IBAMA
@@ -427,7 +547,7 @@
           }).addTo(map);
         }
 
-        // 3. PRODES com rótulos de Ano e Área no centro do polígono
+        // 3. PRODES com rótulos de Ano e Área no centro
         if (featuresProdes && featuresProdes.length > 0) {
           prodesLayer = L.geoJSON(featuresProdes, {
             style: function(feat) {
@@ -435,8 +555,8 @@
               return {
                 color: pos19 ? "#7f1d1d" : "#b35300",
                 weight: 2,
-                fillColor: pos19 ? "#dc2626" : "#fd7e14",
-                fillOpacity: 0.7
+                fillColor: pos19 ? "#dc2626" : "#f37021",
+                fillOpacity: 0.72
               };
             },
             onEachFeature: function(feat, layer) {
@@ -447,7 +567,7 @@
 
               layer.bindPopup(`
                 <div style="font-size:12px; line-height:1.6;">
-                  <b style="color:#b35300; font-size:13px;">Polígono PRODES (INPE)</b><br>
+                  <b style="color:var(--cresol-orange); font-size:13px;">Polígono PRODES (INPE)</b><br>
                   <b>Ano da Supressão:</b> ${anoTxt}<br>
                   <b>Área Sobreposta:</b> ${areaTxt}<br>
                   <b>Enquadramento:</b> ${norma}
