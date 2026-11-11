@@ -34,30 +34,37 @@
       .cabecalho-parecer h3 { margin: 0; color: #333; font-size: 18px; text-transform: uppercase; }
       .cabecalho-parecer p { margin: 5px 0 0 0; font-size: 12px; color: #666; }
       
-      .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; font-size: 14px; }
+      .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; font-size: 14px; }
       .info-grid div { background: #f8f9fa; padding: 10px; border-radius: 4px; border: 1px solid #eee; }
       
-      .status-conforme { color: #155724; font-weight: bold; font-size: 16px; padding: 10px; background: #d4edda; border-radius: 4px; text-align: center; border: 1px solid #c3e6cb; }
-      .status-bloqueio { color: #721c24; font-weight: bold; font-size: 16px; padding: 10px; background: #f8d7da; border-radius: 4px; text-align: center; border: 1px solid #f5c6cb; }
+      .status-box { padding: 12px; border-radius: 6px; text-align: center; margin-bottom: 15px; font-weight: bold; font-size: 15px; }
+      .status-conforme { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+      .status-bloqueio { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
 
-      .fundamentacao { font-size: 12px; color: #555; margin-top: 20px; text-align: justify; padding-top: 15px; border-top: 1px dashed #ccc; }
+      .checks-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; font-size: 13px; }
+      .check-card { padding: 10px; border-radius: 4px; border: 1px solid #ddd; background: #fafafa; }
+      .badge-ok { color: #155724; font-weight: bold; }
+      .badge-alert { color: #c0392b; font-weight: bold; }
+
+      .fundamentacao { font-size: 12px; color: #555; margin-top: 15px; text-align: justify; padding-top: 10px; border-top: 1px dashed #ccc; }
       
       #mapaWrapper { display: none; margin-top: 20px; position: relative; }
-      #map { height: 420px; width: 100%; border-radius: 8px; border: 1px solid #dddddd; }
+      #map { height: 440px; width: 100%; border-radius: 8px; border: 1px solid #dddddd; }
       
-      .legenda-mapa { position: absolute; bottom: 20px; right: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); font-size: 11px; z-index: 1000; }
-      .box-legenda { width: 12px; height: 12px; display: inline-block; margin-right: 5px; vertical-align: middle; }
+      .legenda-mapa { position: absolute; bottom: 20px; right: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px 14px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.25); font-size: 11px; z-index: 1000; line-height: 1.8; }
+      .box-legenda { width: 14px; height: 14px; display: inline-block; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
       .box-car { border: 2px solid #0056b3; background: rgba(0, 86, 179, 0.15); }
-      .box-embargo { border: 1px solid #800f2f; background: #dc3545; }
+      .box-embargo { border: 1px solid #780016; background: #dc3545; }
+      .box-prodes { border: 1px solid #b35300; background: #fd7e14; }
     </style>
   </head>
   <body>
     <div class="container">
       <h2 class="no-print">🌾 Sistema de Compliance Socioambiental - Paraná</h2>
-      <p class="subtitle no-print">Validação automatizada de Crédito Rural (MCR 2-9) | SICAR-PR & IBAMA</p>
+      <p class="subtitle no-print">Validação automatizada de Crédito Rural (MCR 2-9) | SICAR-PR, IBAMA & PRODES (INPE)</p>
       
       <div class="input-group no-print">
-        <input type="text" id="carInput" placeholder="Ex: PR-4106902-..." />
+        <input type="text" id="carInput" placeholder="Ex: PR-4109401-2A476EE49C60405DBC19620FC2399A13" />
         <button onclick="buscarCAR()">Gerar Parecer</button>
       </div>
 
@@ -66,7 +73,7 @@
       <div id="parecerBox">
         <div class="cabecalho-parecer">
           <h3>Parecer Técnico de Conformidade Socioambiental</h3>
-          <p>Operação de Crédito Rural — Verificação de Sobreposição Espacial</p>
+          <p>Operação de Crédito Rural — Verificação de Impedimentos Espaciais e Sobreposições</p>
         </div>
 
         <div class="info-grid">
@@ -76,19 +83,31 @@
           <div><b>Área Declarada:</b> <br><span id="outArea"></span></div>
         </div>
 
-        <div id="outStatus"></div>
+        <div id="outStatus" class="status-box"></div>
+
+        <div class="checks-grid">
+          <div class="check-card" id="cardIbama">
+            <b>Embargos Federais (IBAMA):</b><br>
+            <span id="detalheIbama"></span>
+          </div>
+          <div class="check-card" id="cardProdes">
+            <b>Desmatamento PRODES (INPE):</b><br>
+            <span id="detalheProdes"></span>
+          </div>
+        </div>
 
         <div class="fundamentacao">
           <b>Fundamentação Regulatória (Resolução CMN / MCR 2-9):</b><br>
-          Em cumprimento às diretrizes do Manual de Crédito Rural, veda-se a concessão de financiamento agropecuário a empreendimentos situados em áreas com embargo ambiental vigente lavrado pelo órgão competente (IBAMA), ressalvadas as operações previstas nas exceções normativas do Banco Central do Brasil.
+          Em cumprimento às diretrizes do Manual de Crédito Rural do Banco Central do Brasil, veda-se a concessão de crédito agropecuário a empreendimentos situados em áreas com embargo ambiental vigente lavrado por órgão competente (IBAMA/IAT) ou em sobreposição a polígonos de conversão ilegal de vegetação nativa identificados por sistemas oficiais de monitoramento.
         </div>
 
         <div id="mapaWrapper">
           <div id="map"></div>
           <div class="legenda-mapa">
-            <b>Legenda:</b><br>
+            <b>Legenda Temática:</b><br>
             <span class="box-legenda box-car"></span> Perímetro CAR-PR<br>
-            <span class="box-legenda box-embargo"></span> Embargo IBAMA Detectado
+            <span class="box-legenda box-embargo"></span> Embargo IBAMA<br>
+            <span class="box-legenda box-prodes"></span> Desmatamento PRODES (INPE)
           </div>
         </div>
         
@@ -98,7 +117,7 @@
 
     <script>
       const API_URL = "https://api-compliance-pr.onrender.com";
-      var map = null, carLayer = null, embargoLayer = null;
+      var map = null, carLayer = null, embargoLayer = null, prodesLayer = null;
 
       async function buscarCAR() {
         var cod = document.getElementById("carInput").value.trim();
@@ -111,7 +130,7 @@
         parecerBox.style.display = "none";
         mapaWrapper.style.display = "none";
         load.style.display = "block";
-        load.innerHTML = "⏳ A consultar a base do Paraná e servidores do IBAMA na nuvem...";
+        load.innerHTML = "⏳ A consultar base SICAR-PR, servidores do IBAMA e PRODES (INPE)...";
 
         try {
           const response = await fetch(`${API_URL}/consultar/${encodeURIComponent(cod)}`);
@@ -127,19 +146,39 @@
             document.getElementById("outMun").innerText = `${d.municipio} / ${d.uf}`;
             document.getElementById("outArea").innerText = `${d.area_declarada_ha} ha`;
 
-            const outStatus = document.getElementById("outStatus");
-            if (d.embargo_ibama.bloqueado) {
-              outStatus.className = "status-bloqueio";
-              outStatus.innerHTML = `PARECER: IMPEDIMENTO DE CRÉDITO RURAL DETETADO<br>
-                <span style='font-size:12px; font-weight:normal;'>Sobreposição de ${d.embargo_ibama.area_sobreposta_ha} ha com Embargo Federal (IBAMA).</span>`;
+            const ibama = d.embargo_ibama || { bloqueado: false, area_sobreposta_ha: 0, geometrias: [] };
+            const prodes = d.desmatamento_prodes || { detectado: false, area_sobreposta_ha: 0, geometrias: [] };
+
+            // Detalhamento IBAMA
+            const detalheIbama = document.getElementById("detalheIbama");
+            if (ibama.bloqueado) {
+              detalheIbama.innerHTML = `<span class="badge-alert">IMPEDIMENTO DETECTADO</span><br>Sobreposição de <b>${ibama.area_sobreposta_ha} ha</b>`;
             } else {
-              outStatus.className = "status-conforme";
-              outStatus.innerHTML = "PARECER: IMÓVEL CONFORME<br><span style='font-size:12px; font-weight:normal;'>Sem sobreposições impeditivas identificadas na base consultada.</span>";
+              detalheIbama.innerHTML = `<span class="badge-ok">CONFORME</span><br>Nenhum embargo localizado`;
             }
 
+            // Detalhamento PRODES
+            const detalheProdes = document.getElementById("detalheProdes");
+            if (prodes.detectado) {
+              detalheProdes.innerHTML = `<span class="badge-alert">DESMATAMENTO DETECTADO</span><br>Supressão de <b>${prodes.area_sobreposta_ha} ha</b>`;
+            } else {
+              detalheProdes.innerHTML = `<span class="badge-ok">CONFORME</span><br>Sem alertas de desmatamento`;
+            }
+
+            // Parecer Geral MCR 2-9
+            const outStatus = document.getElementById("outStatus");
+            if (d.bloqueio_credito || ibama.bloqueado || prodes.detectado) {
+              outStatus.className = "status-box status-bloqueio";
+              outStatus.innerHTML = "PARECER: IMPEDIMENTO DE CRÉDITO RURAL (MCR 2-9)<br><span style='font-size:12px; font-weight:normal;'>Identificada restrição socioambiental com sobreposição de áreas vetadas.</span>";
+            } else {
+              outStatus.className = "status-box status-conforme";
+              outStatus.innerHTML = "PARECER: IMÓVEL CONFORME (MCR 2-9)<br><span style='font-size:12px; font-weight:normal;'>Nenhuma sobreposição restritiva identificada nas bases consultadas.</span>";
+            }
+
+            // Renderização do Mapa Leaflet
             if (d.geojson_car) {
               mapaWrapper.style.display = "block";
-              renderizarMapa(d.geojson_car, d.embargo_ibama.geometrias);
+              renderizarMapa(d.geojson_car, ibama.geometrias, prodes.geometrias);
             }
           } else {
             load.style.display = "block";
@@ -151,7 +190,7 @@
         }
       }
 
-      function renderizarMapa(geoCar, geometriasEmbargo) {
+      function renderizarMapa(geoCar, geometriasEmbargo, geometriasProdes) {
         if (!map) {
           map = L.map('map', { zoomControl: false });
           L.control.zoom({ position: 'topright' }).addTo(map);
@@ -159,19 +198,32 @@
           L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}').addTo(map);
         }
         
+        // Limpar camadas anteriores
         if (carLayer) map.removeLayer(carLayer);
         if (embargoLayer) map.removeLayer(embargoLayer);
+        if (prodesLayer) map.removeLayer(prodesLayer);
 
-        carLayer = L.geoJSON(geoCar, { style: { color: "#0056b3", weight: 3, fillOpacity: 0.15 } }).addTo(map);
+        // 1. Perímetro do CAR (Azul)
+        carLayer = L.geoJSON(geoCar, { 
+          style: { color: "#0056b3", weight: 3, fillOpacity: 0.15 } 
+        }).addTo(map);
 
+        // 2. Embargos IBAMA (Vermelho)
         if (geometriasEmbargo && geometriasEmbargo.length > 0) {
           embargoLayer = L.geoJSON(geometriasEmbargo, {
-            style: { color: "#800f2f", weight: 2, fillColor: "#dc3545", fillOpacity: 0.7 }
+            style: { color: "#780016", weight: 2, fillColor: "#dc3545", fillOpacity: 0.65 }
           }).addTo(map);
         }
 
-        map.fitBounds(carLayer.getBounds(), { padding: [15, 15] });
-        setTimeout(function(){ map.invalidateSize(); }, 400);
+        // 3. Desmatamento PRODES (Laranja/Âmbar)
+        if (geometriasProdes && geometriasProdes.length > 0) {
+          prodesLayer = L.geoJSON(geometriasProdes, {
+            style: { color: "#b35300", weight: 2, fillColor: "#fd7e14", fillOpacity: 0.7 }
+          }).addTo(map);
+        }
+
+        map.fitBounds(carLayer.getBounds(), { padding: [20, 20] });
+        setTimeout(function(){ map.invalidateSize(); }, 350);
       }
     </script>
   </body>
