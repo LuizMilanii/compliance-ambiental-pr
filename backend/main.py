@@ -19,35 +19,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Conexão DuckDB em memória com suporte espacial e leitura remota HTTP
+# DuckDB em memória com extensões espaciais e httpfs
 con = duckdb.connect(database=":memory:")
 con.execute("INSTALL spatial; LOAD spatial;")
 con.execute("INSTALL httpfs; LOAD httpfs;")
 
-# Base GeoParquet do CAR-PR hospedada no GitHub Releases
 URL_PARQUET = "https://github.com/LuizMilanii/compliance-ambiental-pr/releases/download/v1.0/car_pr.parquet"
 
-# Projeção métrica para o Paraná (SIRGAS 2000 / UTM zone 22S - EPSG:31982)
+# Projeção métrica para o Paraná (SIRGAS 2000 / UTM 22S - EPSG:31982)
 proj_wgs84 = pyproj.CRS("EPSG:4326")
 proj_utm_pr = pyproj.CRS("EPSG:31982")
 transformer = pyproj.Transformer.from_crs(proj_wgs84, proj_utm_pr, always_xy=True).transform
 
 def calcular_area_ha(geom):
-    """Calcula a área precisa em hectares convertendo WGS84 para UTM 22S."""
+    """Calcula a área precisa em hectares convertendo para projeção UTM."""
     geom_utm = transform(transformer, geom)
     return round(geom_utm.area / 10000.0, 4)
 
 def extrair_ano_prodes(props):
-    """Extrai o ano da supressão florestal a partir dos metadados do TerraBrasilis/INPE."""
-    ano = props.get("year") or props.get("ano")
-    if not ano and "class_name" in props:
-        match = re.search(r"\b(20\d{2})\b", str(props["class_name"]))
-        if match:
-            ano = match.group(1)
-    try:
-        return int(ano)
-    except (ValueError, TypeError):
-        return None
+    """Extrai o ano da supressão florestal a partir dos diferentes padrões de campos do INPE."""
+    for campo in ["year", "ano", "def_year", "ano_prodes"]:
+        if campo in props and props[campo]:
+            try:
+                return int(props[campo])
+            except (ValueError, TypeError):
+                pass
+    
+    # Busca em campos textuais como class_name ou observation (ex: 'd2018', 'desmatamento_2020')
+    for texto in [props.get("class_name"), props.get("image_date"), props.get("view_date")]:
+        if texto:
+            match = re.search(r"\b(20\d{2})\b", str(texto))
+            if match:
+                return int(match.group(1))
+    return None
 
 @app.get("/")
 def health_check():
@@ -57,7 +61,7 @@ def health_check():
 async def consultar_car(cod_car: str):
     cod_car = cod_car.strip().upper()
 
-    # 1. Busca no GeoParquet com conversão explícita do binário WKB para geometria
+    # 1. Consulta no GeoParquet com conversão ST_GeomFromWKB
     query = f"""
         SELECT cod_imovel, municipio, uf, area_ha, ST_AsGeoJSON(ST_GeomFromWKB(geom)) as geojson
         FROM read_parquet('{URL_PARQUET}')
@@ -67,7 +71,7 @@ async def consultar_car(cod_car: str):
     try:
         res = con.execute(query, [cod_car]).fetchone()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao consultar a base: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao consultar base local: {str(e)}")
 
     if not res:
         raise HTTPException(status_code=404, detail="CAR não localizado na base do Paraná.")
@@ -76,85 +80,81 @@ async def consultar_car(cod_car: str):
     car_geom = shape(json.loads(geojson_str))
     minx, miny, maxx, maxy = car_geom.bounds
 
-    # 2. Definição das URLs de WFS com filtro por Bounding Box (BBOX)
+    # 2. URLs de WFS com formato BBOX correto para WFS 1.0.0
     wfs_ibama_url = (
         "https://geoserver.ibama.gov.br/geoserver/wfs?"
         "service=WFS&version=1.0.0&request=GetFeature&typeName=ibama:embargos&"
-        f"outputFormat=application/json&srsName=EPSG:4326&bbox={minx},{miny},{maxx},{maxy},EPSG:4326"
+        f"outputFormat=application/json&srsName=EPSG:4326&bbox={minx},{miny},{maxx},{maxy}"
     )
 
-    wfs_prodes_ma_url = (
-        "https://terrabrasilis.dpi.inpe.br/geoserver/wfs?"
-        "service=WFS&version=1.0.0&request=GetFeature&"
-        "typeName=prodes_mata_atlantica:prodes_mata_atlantica&"
-        f"outputFormat=application/json&srsName=EPSG:4326&bbox={minx},{miny},{maxx},{maxy},EPSG:4326"
-    )
+    # Nomenclaturas reais do TerraBrasilis
+    urls_prodes = [
+        ("Mata Atlântica", f"https://terrabrasilis.dpi.inpe.br/geoserver/wfs?service=WFS&version=1.0.0&request=GetFeature&typeName=prodes_mata_atlantica:yearly_deforestation&outputFormat=application/json&srsName=EPSG:4326&bbox={minx},{miny},{maxx},{maxy}"),
+        ("Mata Atlântica (Fallback)", f"https://terrabrasilis.dpi.inpe.br/geoserver/wfs?service=WFS&version=1.0.0&request=GetFeature&typeName=prodes_mata_atlantica_yearly_deforestation&outputFormat=application/json&srsName=EPSG:4326&bbox={minx},{miny},{maxx},{maxy}"),
+        ("Cerrado", f"https://terrabrasilis.dpi.inpe.br/geoserver/wfs?service=WFS&version=1.0.0&request=GetFeature&typeName=prodes_cerrado:yearly_deforestation&outputFormat=application/json&srsName=EPSG:4326&bbox={minx},{miny},{maxx},{maxy}")
+    ]
 
-    wfs_prodes_cerrado_url = (
-        "https://terrabrasilis.dpi.inpe.br/geoserver/wfs?"
-        "service=WFS&version=1.0.0&request=GetFeature&"
-        "typeName=prodes_cerrado:prodes_cerrado&"
-        f"outputFormat=application/json&srsName=EPSG:4326&bbox={minx},{miny},{maxx},{maxy},EPSG:4326"
-    )
-
-    # 3. Execução assíncrona paralela das consultas WFS externas
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        respostas = await asyncio.gather(
-            client.get(wfs_ibama_url),
-            client.get(wfs_prodes_ma_url),
-            client.get(wfs_prodes_cerrado_url),
-            return_exceptions=True
-        )
-
-    resp_ibama, resp_ma, resp_cerrado = respostas
-
-    # 4. Processamento dos Embargos IBAMA
     ibama_intersect_area = 0.0
     ibama_features = []
-    if isinstance(resp_ibama, httpx.Response) and resp_ibama.status_code == 200:
-        try:
-            data_ibama = resp_ibama.json()
-            for feat in data_ibama.get("features", []):
-                geom_embargo = shape(feat["geometry"])
-                if car_geom.intersects(geom_embargo):
-                    inter = car_geom.intersection(geom_embargo)
-                    area_inter = calcular_area_ha(inter)
-                    if area_inter > 0.0001:
-                        ibama_intersect_area += area_inter
-                        ibama_features.append(mapping(inter))
-        except Exception:
-            pass
-
-    # 5. Processamento do PRODES (Mata Atlântica e Cerrado com corte >= 2004)
     prodes_intersect_area = 0.0
     prodes_features = []
     anos_detectados = set()
     biomas_detectados = set()
+    debug_logs = []
 
-    for resp, bioma_nome in [(resp_ma, "Mata Atlântica"), (resp_cerrado, "Cerrado")]:
-        if isinstance(resp, httpx.Response) and resp.status_code == 200:
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+        # Consulta IBAMA
+        try:
+            resp_ibama = await client.get(wfs_ibama_url)
+            if resp_ibama.status_code == 200:
+                data_ib = resp_ibama.json()
+                for feat in data_ib.get("features", []):
+                    geom_e = shape(feat["geometry"])
+                    if car_geom.intersects(geom_e):
+                        inter = car_geom.intersection(geom_e)
+                        a_ha = calcular_area_ha(inter)
+                        if a_ha > 0.0001:
+                            ibama_intersect_area += a_ha
+                            ibama_features.append(mapping(inter))
+        except Exception as e:
+            debug_logs.append(f"IBAMA falhou: {str(e)}")
+
+        # Consulta PRODES
+        for bioma_label, url in urls_prodes:
             try:
-                data_prodes = resp.json()
-                for feat in data_prodes.get("features", []):
-                    props = feat.get("properties", {})
-                    ano_evento = extrair_ano_prodes(props)
-
-                    # Filtro temporal: ignora supressões anteriores a 2004
-                    if ano_evento is not None and ano_evento < 2004:
+                resp = await client.get(url)
+                if resp.status_code == 200:
+                    try:
+                        data = resp.json()
+                    except Exception:
+                        debug_logs.append(f"{bioma_label}: retornou status 200 mas resposta não era JSON.")
                         continue
 
-                    geom_desmat = shape(feat["geometry"])
-                    if car_geom.intersects(geom_desmat):
-                        inter_p = car_geom.intersection(geom_desmat)
-                        area_p = calcular_area_ha(inter_p)
-                        if area_p > 0.0001:
-                            prodes_intersect_area += area_p
-                            biomas_detectados.add(bioma_nome)
-                            if ano_evento:
-                                anos_detectados.add(ano_evento)
-                            prodes_features.append(mapping(inter_p))
-            except Exception:
-                pass
+                    feats = data.get("features", [])
+                    debug_logs.append(f"{bioma_label}: retornou {len(feats)} registros brutos no BBOX.")
+
+                    for feat in feats:
+                        props = feat.get("properties", {})
+                        ano = extrair_ano_prodes(props)
+
+                        # Filtro MCR: apenas eventos a partir de 2004
+                        if ano is not None and ano < 2004:
+                            continue
+
+                        geom_p = shape(feat["geometry"])
+                        if car_geom.intersects(geom_p):
+                            inter_p = car_geom.intersection(geom_p)
+                            a_p = calcular_area_ha(inter_p)
+                            if a_p > 0.0001:
+                                prodes_intersect_area += a_p
+                                biomas_detectados.add(bioma_label.split()[0])
+                                if ano:
+                                    anos_detectados.add(ano)
+                                prodes_features.append(mapping(inter_p))
+                else:
+                    debug_logs.append(f"{bioma_label}: HTTP {resp.status_code}")
+            except Exception as e:
+                debug_logs.append(f"{bioma_label} erro conexão: {str(e)}")
 
     bloqueado = (ibama_intersect_area > 0.0) or (prodes_intersect_area > 0.0)
 
@@ -179,6 +179,7 @@ async def consultar_car(cod_car: str):
                 "biomas_detectados": sorted(list(biomas_detectados)),
                 "geometrias": prodes_features
             },
+            "diagnostico_servidores": debug_logs,
             "geojson_car": json.loads(geojson_str)
         }
     }
